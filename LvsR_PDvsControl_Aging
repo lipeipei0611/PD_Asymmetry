@@ -1,0 +1,84 @@
+PD_Sample <- read.table("PD_Sample_filter_dominant_cellType.txt", header=T, sep="\t")
+head(PD_Sample)
+
+PD_Methylation <- read.table("PD_enh_raw_target_methy_rmWGA_rmOutlier_aveReplicate_70p_rm0_rmCommonSNP_50P_MValue.txt", header=TRUE)
+head(PD_Methylation)
+
+
+
+
+library("limma")
+data <- PD_Methylation[, 6:ncol(PD_Methylation)]
+design <- model.matrix(~ BrainHemisphere*Source*Age + Sex + PMI + GLU, data= PD_Sample)
+
+fit <- lmFit(data, design=design,method="robust")
+fit_coefficients <- cbind(PD_Methylation [, 1:5], data.frame(fit$coefficients))
+
+
+
+AgeMin <- 54.00
+AgeMax <- 93.00
+
+BrainHemisphereR_SourcePD_AgeMin <- c(1, 1, 1, AgeMin, 1, 1, 1, 1*1, 1*AgeMin, 1*AgeMin, 1*1*AgeMin)
+BrainHemisphereR_SourcePD_AgeMax <- c(1, 1, 1, AgeMax, 1, 1, 1, 1*1, 1*AgeMax, 1*AgeMax, 1*1*AgeMax)
+BrainHemisphereL_SourcePD_AgeMin <- c(1, 0, 1, AgeMin, 1, 1, 1, 0*1, 0*AgeMin, 1*AgeMin, 0*1*AgeMin)
+BrainHemisphereL_SourcePD_AgeMax <- c(1, 0, 1, AgeMax, 1, 1, 1, 0*1, 0*AgeMax, 1*AgeMax, 0*1*AgeMax)
+
+BrainHemisphereR_SourceControl_AgeMin <- c(1, 1, 0, AgeMin, 1, 1, 1, 1*0, 1*AgeMin, 0*AgeMin, 1*0*AgeMin)
+BrainHemisphereR_SourceControl_AgeMax <- c(1, 1, 0, AgeMax, 1, 1, 1, 1*0, 1*AgeMax, 0*AgeMax, 1*0*AgeMax)
+BrainHemisphereL_SourceControl_AgeMin <- c(1, 0, 0, AgeMin, 1, 1, 1, 0*0, 0*AgeMin, 0*AgeMin, 0*0*AgeMin)
+BrainHemisphereL_SourceControl_AgeMax <- c(1, 0, 0, AgeMax, 1, 1, 1, 0*0, 0*AgeMax, 0*AgeMax, 0*0*AgeMax)
+
+
+
+BrainHemisphereR_SourcePD_AgeMax_BrainHemisphereR_SourcePD_AgeMin <- BrainHemisphereR_SourcePD_AgeMax - BrainHemisphereR_SourcePD_AgeMin
+BrainHemisphereL_SourcePD_AgeMax_BrainHemisphereL_SourcePD_AgeMin <- BrainHemisphereL_SourcePD_AgeMax - BrainHemisphereL_SourcePD_AgeMin
+BrainHemisphereR_SourcePD_AgeMin_BrainHemisphereL_SourcePD_AgeMin <- BrainHemisphereR_SourcePD_AgeMin - BrainHemisphereL_SourcePD_AgeMin
+BrainHemisphereR_SourcePD_AgeMax_BrainHemisphereL_SourcePD_AgeMax <- BrainHemisphereR_SourcePD_AgeMax - BrainHemisphereL_SourcePD_AgeMax
+
+BrainHemisphereR_SourcePD_AgeMax_BrainHemisphereR_SourcePD_AgeMin_BrainHemisphereL_SourcePD_AgeMax_BrainHemisphereL_SourcePD_AgeMin <- BrainHemisphereR_SourcePD_AgeMax_BrainHemisphereR_SourcePD_AgeMin - BrainHemisphereL_SourcePD_AgeMax_BrainHemisphereL_SourcePD_AgeMin
+
+BrainHemisphereR_SourcePD_AgeMax_BrainHemisphereL_SourcePD_AgeMax_BrainHemisphereR_SourcePD_AgeMin_BrainHemisphereL_SourcePD_AgeMin <- BrainHemisphereR_SourcePD_AgeMax_BrainHemisphereL_SourcePD_AgeMax - BrainHemisphereR_SourcePD_AgeMin_BrainHemisphereL_SourcePD_AgeMin
+
+
+BrainHemisphereR_SourceControl_AgeMax_BrainHemisphereR_SourceControl_AgeMin <- BrainHemisphereR_SourceControl_AgeMax - BrainHemisphereR_SourceControl_AgeMin
+BrainHemisphereL_SourceControl_AgeMax_BrainHemisphereL_SourceControl_AgeMin <- BrainHemisphereL_SourceControl_AgeMax - BrainHemisphereL_SourceControl_AgeMin
+BrainHemisphereR_SourceControl_AgeMin_BrainHemisphereL_SourceControl_AgeMin <- BrainHemisphereR_SourceControl_AgeMin - BrainHemisphereL_SourceControl_AgeMin
+BrainHemisphereR_SourceControl_AgeMax_BrainHemisphereL_SourceControl_AgeMax <- BrainHemisphereR_SourceControl_AgeMax - BrainHemisphereL_SourceControl_AgeMax
+
+BrainHemisphereR_SourceControl_AgeMax_BrainHemisphereR_SourceControl_AgeMin_BrainHemisphereL_SourceControl_AgeMax_BrainHemisphereL_SourceControl_AgeMin <- BrainHemisphereR_SourceControl_AgeMax_BrainHemisphereR_SourceControl_AgeMin - BrainHemisphereL_SourceControl_AgeMax_BrainHemisphereL_SourceControl_AgeMin
+
+BrainHemisphereR_SourceControl_AgeMax_BrainHemisphereL_SourceControl_AgeMax_BrainHemisphereR_SourceControl_AgeMin_BrainHemisphereL_SourceControl_AgeMin <- BrainHemisphereR_SourceControl_AgeMax_BrainHemisphereL_SourceControl_AgeMax - BrainHemisphereR_SourceControl_AgeMin_BrainHemisphereL_SourceControl_AgeMin
+
+
+BrainHemisphereR_L_SourcePD_Control_AgeMax_Min <- BrainHemisphereR_SourcePD_AgeMax_BrainHemisphereR_SourcePD_AgeMin_BrainHemisphereL_SourcePD_AgeMax_BrainHemisphereL_SourcePD_AgeMin - BrainHemisphereR_SourceControl_AgeMax_BrainHemisphereR_SourceControl_AgeMin_BrainHemisphereL_SourceControl_AgeMax_BrainHemisphereL_SourceControl_AgeMin
+
+
+BrainHemisphereR_L_SourcePD_Control_AgeMax_Min <- BrainHemisphereR_SourcePD_AgeMax_BrainHemisphereL_SourcePD_AgeMax_BrainHemisphereR_SourcePD_AgeMin_BrainHemisphereL_SourcePD_AgeMin - BrainHemisphereR_SourceControl_AgeMax_BrainHemisphereL_SourceControl_AgeMax_BrainHemisphereR_SourceControl_AgeMin_BrainHemisphereL_SourceControl_AgeMin
+
+
+contrast.matrix <- cbind(BrainHemisphereR_L_SourcePD_Control_AgeMax_Min, BrainHemisphereR_SourcePD_AgeMax_BrainHemisphereR_SourcePD_AgeMin_BrainHemisphereL_SourcePD_AgeMax_BrainHemisphereL_SourcePD_AgeMin, BrainHemisphereR_SourceControl_AgeMax_BrainHemisphereR_SourceControl_AgeMin_BrainHemisphereL_SourceControl_AgeMax_BrainHemisphereL_SourceControl_AgeMin)
+rownames(contrast.matrix) <- colnames(design)
+
+fit_Contrast <- contrasts.fit(fit,contrast.matrix)
+fit_Contrast <- eBayes(fit_Contrast)
+
+
+
+BrainHemisphereR_L_SourcePD_Control_AgeMax_Min_table <- cbind(PD_Methylation[, 1:5],toptable(fit_Contrast,coef=1,adjust.method="BH",sort="none",n=Inf))
+
+BrainHemisphereR_L_SourcePD_AgeMax_Min_table <- cbind(PD_Methylation[, 1:5],toptable(fit_Contrast,coef=2,adjust.method="BH",sort="none",n=Inf))
+
+BrainHemisphereR_L_SourceControl_AgeMax_Min_table <- cbind(PD_Methylation[, 1:5],toptable(fit_Contrast,coef=3,adjust.method="BH",sort="none",n=Inf))
+
+PD_logFC <- BrainHemisphereR_L_SourcePD_AgeMax_Min_table$logFC
+Control_logFC <- BrainHemisphereR_L_SourceControl_AgeMax_Min_table$logFC
+
+absDiff <- abs(PD_logFC) - abs(Control_logFC)
+
+BrainHemisphereR_L_SourcePD_Control_AgeMax_Min_table_absDiff <- data.frame(BrainHemisphereR_L_SourcePD_Control_AgeMax_Min_table, PD_logFC, Control_logFC, absDiff)
+
+write.table(BrainHemisphereR_L_SourcePD_Control_AgeMax_Min_table_absDiff, "BrainHemisphereR_L_SourcePD_Control_AgeMax_Min_table_absDiff.txt", quote=F, row.names=F, sep="\t")
+
+BrainHemisphereR_L_SourcePD_Control_AgeMax_Min_table_absDiff_fdr0.05 <- subset(BrainHemisphereR_L_SourcePD_Control_AgeMax_Min_table_absDiff, BrainHemisphereR_L_SourcePD_Control_AgeMax_Min_table_absDiff$adj.P.Val <= 0.05)
+dim(BrainHemisphereR_L_SourcePD_Control_AgeMax_Min_table_absDiff_fdr0.05)

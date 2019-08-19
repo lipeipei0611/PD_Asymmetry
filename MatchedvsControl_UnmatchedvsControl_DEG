@@ -1,0 +1,216 @@
+
+Sample_infor_NeuronsPop_Batch <- read.table("Sample_infor_NeuronsPop_Batch.txt", header=T, sep="\t")
+head(Sample_infor_NeuronsPop_Batch)
+
+
+######allSample
+library("AnnotationDbi")
+library("org.Hs.eg.db")
+library(calibrate)
+library(gplots)
+library(viridis)
+library(vegan)
+library(pheatmap)
+library(RColorBrewer)
+library(RUVSeq)
+
+
+covar <- Sample_infor_NeuronsPop_Batch
+head(covar)
+
+
+
+
+group <- matrix(data=NA, ncol=1, nrow=nrow(covar))
+
+for(i in 1:nrow(covar))
+{
+	if(covar[i, ]$Source == "Control")
+		group[i,1] <- c("Control")
+		
+	if(covar[i, ]$Source == "PD" & !is.na(covar[i, ]$dominant))
+	{
+		if(covar[i, ]$dominant == "matched")
+			group[i,1] <- c("matched")
+		if(covar[i, ]$dominant == "nonMatched")
+		group[i,1] <- c("nonMatched")	
+	}	
+}
+
+covar$GROUP <- group
+
+
+
+
+
+#--------- EdgeR
+library(edgeR)
+counts <- list.files(path = "genecounts")
+counts <- readDGE(counts,path="genecounts",columns=c(1,2), header=FALSE)
+counts <- counts$counts
+counts <- counts[, c(as.character(covar$Sample))]
+
+#- DGEList data class
+library(edgeR)
+y <- DGEList(counts, group = covar$Source)
+
+#- Filtering
+keep <- rowSums(cpm(y)>=1) == ceiling(nrow(covar))
+y <- y[keep, , keep.lib.sizes=FALSE]
+dim(y)
+[1] 14121    36
+
+#- Normalization
+y <- calcNormFactors(y,method="TMM")
+y$samples
+
+#- CPM
+cpm <- cpm(y,normalized.lib.sizes=TRUE, log=FALSE)
+#write.csv(cpm,file="cpm.csv")
+logcpm <- cpm(y,normalized.lib.sizes=TRUE, log=TRUE)
+#write.csv(logcpm, file="logcpm.csv")
+
+
+
+#---------- Design
+
+design <- model.matrix(~ Source + Brain_Hemisphere + Age + Sex + RIN + neurons, data=covar) 
+
+design1 <- model.matrix(~ 0 + GROUP + Brain_Hemisphere + Age + Sex + RIN + neurons, data= covar)
+colnames(design1)[1:3] <- c("CTRL", "Matched", "nonMatched")
+
+
+#---------- Estimate Dispersion
+
+y1 <- y
+y <- estimateDisp(y, design)
+y1 <- estimateDisp(y1, design1)
+
+#---------- Quasi-likelihood Fit
+
+fit <- glmQLFit(y, design)
+fit1 <- glmQLFit(y1, design1)
+
+#--------- Contrast
+
+contrast <- makeContrasts(MatchedvsCTRL=Matched-CTRL, nonMatchedvsCTRL=nonMatched-CTRL, MatchedvsnonMatched=Matched-nonMatched, levels=design1)
+
+#--------- Quasi-likelihood FTest
+
+qlf <- glmQLFTest(fit,coef=2)
+qlf <- topTags(qlf, n=Inf, adjust.method="BH", sort="none")$table
+
+qlf1 <- glmQLFTest(fit1, contrast=contrast[,"MatchedvsCTRL"])
+qlf1 <- topTags(qlf1, n=Inf, adjust.method="BH", sort="none")$table
+
+qlf2 <- glmQLFTest(fit1, contrast=contrast[,"nonMatchedvsCTRL"])
+qlf2 <- topTags(qlf2, n=Inf, adjust.method="BH", sort="none")$table
+
+qlf3 <- glmQLFTest(fit1, contrast=contrast[,"MatchedvsnonMatched"])
+qlf3 <- topTags(qlf3, n=Inf, adjust.method="BH", sort="none")$table
+
+
+
+#---------- combine gene names & cpm counts
+ 
+qlf <- cbind(qlf,cpm)
+#write.csv(qlf, file="PD_RNAseq_glmQLF_PDvsCTRL_Age_Sex_RIN.csv")
+
+qlf1 <- cbind(qlf1,cpm)
+#write.csv(qlf1, file="PD_RNAseq_glmQLF_contrast_MatchedvsCTRL_Age_Sex_RIN.csv")
+
+qlf2 <- cbind(qlf2,cpm)
+#write.csv(qlf2, file="PD_RNAseq_glmQLF_contrast_nonMatchedvsCTRL_Age_Sex_RIN.csv")
+
+qlf3 <- cbind(qlf3,cpm)
+#write.csv(qlf3, file="PD_RNAseq_glmQLF_contrast_MatchedvsnonMatched_Age_Sex_RIN.csv")
+
+
+#---------- Filter FDR <= 0.1
+
+qlf_FDR <- qlf[qlf$FDR <= 0.05,]
+#write.csv(qlf_FDR, file="PD_RNAseq_glmQLF_PDvsCTRL_Age_Sex_RIN_0.05FDR.csv")
+ 
+qlf1_FDR <- qlf1[qlf1$FDR <= 0.05,]
+#write.csv(qlf1_FDR, file="PD_RNAseq_glmQLF_contrast_MatchedvsCTRL_Age_Sex_RIN_0.05FDR.csv")
+ 
+qlf2_FDR <- qlf2[qlf2$FDR <= 0.05,]
+#write.csv(qlf2_FDR, file="PD_RNAseq_glmQLF_contrast_nonMatchedvsCTRL_Age_Sex_RIN_0.05FDR.csv")
+
+qlf3_FDR <- qlf3[qlf3$FDR <= 0.05,]
+#write.csv(qlf3_FDR, file="PD_RNAseq_glmQLF_contrast_MatchedvsnonMatched_Age_Sex_RIN_0.05FDR.csv")
+ 
+------------------------------------------------------------ EdgeR RUVseq
+
+
+
+#---------- Stable Genes
+
+empirical <- qlf$PValue >= 0.25 & qlf1$PValue >= 0.25 & qlf2$PValue >= 0.25 & qlf3$PValue >= 0.25
+
+#---------- PCA
+
+#plotPCA(logcpm, col=colors[as.factor(covar$Source)], cex=1.2)
+#plotPCA(RUVg(combat, empirical, k=1, isLog=TRUE)$normalizedCounts, col=colors[as.factor(covar$GROUP)], cex=1.2)
+
+#---------- RUVg
+
+covar$RUVg <- round(RUVg(logcpm, empirical, k=1, isLog=TRUE)$W, digits=3)
+
+#---------- Design
+
+design1 <- model.matrix(~ 0 + GROUP + Brain_Hemisphere + Age + Sex + RIN + neurons + RUVg, data=covar)
+colnames(design1)[1:3] <- c("CTRL", "Matched", "nonMatched")
+
+#---------- Estimate Dispersion
+
+y1 <- estimateDisp(y1, design1)
+
+#---------- Quasi-likelihood Fit
+
+fit1 <- glmQLFit(y1, design1)
+
+#--------- Contrast
+
+contrast <- makeContrasts(MatchedvsCTRL=Matched-CTRL, nonMatchedvsCTRL=nonMatched-CTRL, MatchedvsnonMatched=Matched-nonMatched, levels=design1)
+
+#--------- Quasi-likelihood FTest
+
+qlf1_ruvg <- glmQLFTest(fit1, contrast=contrast[,"MatchedvsCTRL"])
+qlf1_ruvg <- topTags(qlf1_ruvg, n=Inf, adjust.method="BH", sort="none")$table
+
+qlf2_ruvg <- glmQLFTest(fit1, contrast=contrast[,"nonMatchedvsCTRL"])
+qlf2_ruvg <- topTags(qlf2_ruvg, n=Inf, adjust.method="BH", sort="none")$table
+
+qlf3_ruvg <- glmQLFTest(fit1, contrast=contrast[,"MatchedvsnonMatched"])
+qlf3_ruvg <- topTags(qlf3_ruvg, n=Inf, adjust.method="BH", sort="none")$table
+
+
+#---------- combine gene names & cpm counts
+
+qlf1_ruvg <- cbind(qlf1_ruvg, logcpm)
+write.csv(qlf1_ruvg, file="PD_RNAseq_glmQLF_contrast_MatchedvsCTRL_bh_Age_Sex_RIN_RUVg_neuronP.csv")
+
+qlf2_ruvg <- cbind(qlf2_ruvg, logcpm)
+write.csv(qlf2_ruvg, file="PD_RNAseq_glmQLF_contrast_nonMatchedvsCTRL_bh_Age_Sex_RIN_RUVg_neuronP.csv")
+
+qlf3_ruvg <- cbind(qlf3_ruvg, logcpm)
+#write.csv(qlf3_ruvg, file="PD_RNAseq_glmQLF_contrast_MatchedvsnonMatched_bh_Age_Sex_RIN_RUVg.csv")
+
+#---------- Filter FDR <= 0.05
+
+qlf1_ruvg_FDR <- qlf1_ruvg[qlf1_ruvg$FDR <= 0.05,]
+write.csv(qlf1_ruvg_FDR, file="PD_RNAseq_glmQLF_contrast_MatchedvsCTRL_bh_Age_Sex_RIN_RUVg_neuronP_0.05FDR.csv")
+
+qlf2_ruvg_FDR <- qlf2_ruvg[qlf2_ruvg$FDR <= 0.05,]
+write.csv(qlf2_ruvg_FDR, file="PD_RNAseq_glmQLF_contrast_nonMatchedvsCTRL_bh_Age_Sex_RIN_RUVg_neuronP_0.05FDR.csv")
+
+qlf3_ruvg_FDR <- qlf3_ruvg[qlf3_ruvg$FDR <= 0.05,]
+#write.csv(qlf3_ruvg_FDR, file="PD_RNAseq_glmQLF_contrast_MatchedvsnonMatched_bh_Age_Sex_RIN_RUVg_0.05FDR.csv")
+
+
+dim(qlf1_ruvg_FDR)
+dim(qlf2_ruvg_FDR)
+
+
+

@@ -1,0 +1,56 @@
+
+Sample_order_prop <- read.table("Sample_order_prop.txt", header=T, sep="\t")
+head(Sample_order_prop)
+summary(Sample_order_prop)
+
+Validation_MValue <- read.table("Validation_MValue.txt", header=T, sep=" ")
+head(Validation_MValue)
+
+###http://www.bioconductor.org/packages/devel/bioc//vignettes/variancePartition/inst/doc/dream.html#limma-analysis
+
+
+library("limma")
+data <- Validation_MValue[, 6:ncol(Validation_MValue)]
+design <- model.matrix(~ AsymmetryGroup*Age + BrainHemisphere + Sex + PMI + GLU, data= Sample_order_prop)
+dupcor <- duplicateCorrelation(data, design, block= Sample_order_prop$TissueID)
+fit <- lmFit(data, design, block= Sample_order_prop$TissueID, correlation=dupcor$consensus, method="robust")
+
+Age_Min <- 51.00
+Age_Mean <- 74.01
+Age_Max <- 102.00
+
+
+CTRL <- c(1, 0, 0, Age_Mean, 1, 1, 1, 1, 0*Age_Mean, 0*Age_Mean)
+Matched <- c(1, 1, 0, Age_Mean, 1, 1, 1, 1, 1*Age_Mean, 0*Age_Mean)
+nonMatched <- c(1, 0, 1, Age_Mean, 1, 1, 1, 1, 0*Age_Mean, 1*Age_Mean)
+
+Matched_CTRL <- Matched - CTRL
+nonMatched_CTR <- nonMatched - CTRL
+
+contrast.matrix <- cbind(Matched_CTRL, nonMatched_CTR)
+rownames(contrast.matrix) <- colnames(design)
+
+fit_Contrast <- contrasts.fit(fit, contrast.matrix)
+fit_Contrast <- eBayes(fit_Contrast)
+
+Matched_CTRL_table <- cbind(Validation_MValue[, 1:5],toptable(fit_Contrast,coef=1,adjust.method="BH",sort="none",n=Inf))
+nonMatched_CTR_table <- cbind(Validation_MValue[, 1:5],toptable(fit_Contrast,coef=2,adjust.method="BH",sort="none",n=Inf))
+
+Matched_CTRL_table_fdr0.05 <- subset(Matched_CTRL_table, Matched_CTRL_table$adj.P.Val <= 0.05)
+dim(Matched_CTRL_table_fdr0.05)
+
+
+nonMatched_CTR_table_fdr0.05 <- subset(nonMatched_CTR_table, nonMatched_CTR_table$adj.P.Val <= 0.05)
+dim(nonMatched_CTR_table_fdr0.05)
+
+
+
+write.table(Matched_CTRL_table, "Matched_CTRL_table.txt", row.names=FALSE, quote=FALSE, sep="\t")
+write.table(Matched_CTRL_table_fdr0.05, "Matched_CTRL_table_fdr0.05.txt", row.names=FALSE, quote=FALSE, sep="\t")
+
+write.table(Matched_CTRL_table_fdr0.05, "Matched_CTRL_table_fdr0.05.txt", row.names=FALSE, quote=FALSE, sep="\t")
+write.table(nonMatched_CTR_table_fdr0.05, "nonMatched_CTR_table_fdr0.05.txt", row.names=FALSE, quote=FALSE, sep="\t")
+
+
+
+

@@ -1,0 +1,154 @@
+library(metap)
+
+Methylation_SingleGene_DMC <- read.table("Methylation_SingleGene_DMC.txt", header=T, sep="\t")
+head(Methylation_SingleGene_DMC)
+
+Methylation_geneList <- unique(data.frame(Methylation_SingleGene_DMC$SingleGene))
+head(Methylation_geneList)
+dim(Methylation_geneList)
+
+results <- matrix(data=NA, ncol=1, nrow=nrow(Methylation_geneList))
+for(i in 1:nrow(Methylation_geneList))
+{
+	temp <- as.character(Methylation_geneList[i,1])	
+	sub <- subset(Methylation_SingleGene_DMC, Methylation_SingleGene_DMC$SingleGene == temp)
+	if(nrow(sub) == 1)
+	{
+		results[i, 1] <- sub[1,]$P.Value
+	}	
+	if(nrow(sub) > 1)
+	{
+		results[i, 1] <- sumlog(sub$P.Value)$p
+	}	
+	
+}
+results <- data.frame(Methylation_geneList, results)
+colnames(results) <- c("Gene", "P")
+
+Methylation_SingleGene_DMC_order <- results[order(results$P),]
+
+
+
+
+
+
+
+Validation_SingleGene_DMC <- read.table("Validation_SingleGene_DMC.txt", header=T, sep="\t")
+head(Validation_SingleGene_DMC)
+
+Validation_geneList <- unique(data.frame(Validation_SingleGene_DMC$SingleGene))
+head(Validation_geneList)
+dim(Validation_geneList)
+
+results <- matrix(data=NA, ncol=1, nrow=nrow(Validation_geneList))
+for(i in 1:nrow(Validation_geneList))
+{
+	temp <- as.character(Validation_geneList[i,1])	
+	sub <- subset(Validation_SingleGene_DMC, Validation_SingleGene_DMC$SingleGene == temp)	
+	if(nrow(sub) == 1)
+	{
+		results[i, 1] <- sub[1,]$P.Value
+	}	
+	if(nrow(sub) > 1)
+	{
+		results[i, 1] <- sumlog(sub$P.Value)$p
+	}	
+}
+results <- data.frame(Validation_geneList, results)
+colnames(results) <- c("Gene", "P")
+
+Validation_SingleGene_DMC_order <- results[order(results$P),]
+
+
+
+
+rownames(Validation_SingleGene_DMC_order) <- Validation_SingleGene_DMC_order$Gene
+rownames(Methylation_SingleGene_DMC_order) <- Methylation_SingleGene_DMC_order$Gene
+overlap_m <-  subset(Methylation_SingleGene_DMC_order, rownames(Methylation_SingleGene_DMC_order) %in% rownames(Validation_SingleGene_DMC_order) )
+dim(overlap_m)
+head(overlap_m)
+
+write.table(overlap_m, "overlap_m_combinedP.txt", quote=F, sep="\t", row.names=F)
+
+
+RNASeq_MU_Symbol <- read.table("RNASeq_matchedControl_FDR0.1_only_abslogFC.txt", header=T, sep="\t")
+head(RNASeq_MU_Symbol)
+
+rownames(RNASeq_MU_Symbol) <- RNASeq_MU_Symbol$SYMBOL
+overlap_mr <-  subset(RNASeq_MU_Symbol, rownames(RNASeq_MU_Symbol) %in% rownames(overlap_m) )
+dim(overlap_mr)
+head(overlap_mr)
+
+overlap_mr <- overlap_mr[order(overlap_mr$PValue),]
+
+overlap_mr$SYMBOL
+
+ 
+ 
+write.table(overlap_mr, "overlap_mr_combinedP.txt", row.names=F, sep="\t", quote=F)
+
+
+
+
+
+
+
+
+
+
+overlap_mr <- read.table("overlap_mr_combinedP.txt", header=T, sep="\t")
+head(overlap_mr)
+rownames(overlap_mr) <- overlap_mr$SYMBOL
+
+geneList <- unique(data.frame(overlap_mr$SYMBOL))
+
+
+results <- matrix(data=NA, ncol=1, nrow=nrow(geneList))
+for(i in 1:nrow(geneList))
+{
+	temp <- as.character(geneList[i,1])	
+	sub <- subset(Methylation_SingleGene_DMC_order, Methylation_SingleGene_DMC_order$Gene == temp)	
+	suborder <- sub[order(sub$P),]
+	results[i, 1] <- suborder[1,]$P
+}
+results <- data.frame(geneList, results)
+colnames(results) <- c("Gene", "P")
+
+Methylation_SingleGene_DMC_order <- results[order(results$P),]
+
+
+results <- matrix(data=NA, ncol=1, nrow=nrow(geneList))
+for(i in 1:nrow(geneList))
+{
+	temp <- as.character(geneList[i,1])	
+	sub <- subset(Validation_SingleGene_DMC_order, Validation_SingleGene_DMC_order$Gene == temp)	
+	suborder <- sub[order(sub$P),]
+	results[i, 1] <- suborder[1,]$P
+}
+results <- data.frame(geneList, results)
+colnames(results) <- c("Gene", "P")
+
+Validation_SingleGene_DMC_order <- results[order(results$P),]
+
+
+
+RNASeq_MU_Symbol <- read.table("RNASeq_matchedControl_FDR0.1_only_abslogFC.txt", header=T, sep="\t")
+head(RNASeq_MU_Symbol)
+
+rownames(RNASeq_MU_Symbol) <- RNASeq_MU_Symbol$SYMBOL
+sub <-  subset(RNASeq_MU_Symbol, rownames(RNASeq_MU_Symbol) %in% rownames(overlap_mr) )
+
+rnaseq_p <- data.frame(sub$SYMBOL, sub$PValue)
+colnames(rnaseq_p) <- c("Gene", "P")
+
+rnaseq_p_order <- rnaseq_p[order(rnaseq_p$P),]
+
+
+
+library("RobustRankAggreg")
+
+rankedGeneList <- list(as.character(Methylation_SingleGene_DMC_order$Gene), as.character(Validation_SingleGene_DMC_order$Gene), as.character(rnaseq_p_order$Gene))
+hallmarkGenes <- aggregateRanks(rankedGeneList, method="RRA")
+write.table(hallmarkGenes, "hallmarkGenes_combinedP.txt", quote=F, sep="\t", row.names=F)
+
+

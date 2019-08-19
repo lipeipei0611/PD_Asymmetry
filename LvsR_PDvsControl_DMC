@@ -1,0 +1,74 @@
+PD_Sample <- read.table("PD_Sample_filter_dominant_cellType.txt", header=T, sep="\t")
+head(PD_Sample)
+
+#####
+Age_1stQu <- 71.00
+Age_Mean <- 76.63
+Age_3stQu <- 82.00
+
+#PD_Methylation <- read.table("PD_enh_raw_target_methy_rmWGA_rmOutlier_aveReplicate_70p_rm0_rmCommonSNP_50P.txt", header=TRUE)
+#head(PD_Methylation)
+
+PD_Methylation <- read.table("PD_enh_raw_target_methy_rmWGA_rmOutlier_aveReplicate_70p_rm0_rmCommonSNP_50P_MValue.txt", header=TRUE)
+head(PD_Methylation)
+
+
+
+
+library("limma")
+data <- PD_Methylation[, 6:ncol(PD_Methylation)]
+design <- model.matrix(~ BrainHemisphere*Source*Age + Sex + PMI + GLU, data= PD_Sample)
+
+fit <- lmFit(data, design=design,method="robust")
+fit_coefficients <- cbind(PD_Methylation [, 1:5], data.frame(fit$coefficients))
+##write.table(fit_coefficients, "fit_coefficients.txt", quote=F, sep="\t", row.names=F)
+
+
+
+Age <- Age_Mean
+BrainHemisphereR_SourcePD <- c(1, 1, 1, Age, 1, 1, 1, 1*1, 1*Age, 1*Age, 1*1*Age)
+BrainHemisphereL_SourcePD <- c(1, 0, 1, Age, 1, 1, 1, 0*1, 0*Age, 1*Age, 0*1*Age)
+BrainHemisphereR_SourceControl <- c(1, 1, 0, Age, 1, 1, 1, 1*0, 1*Age, 0*Age, 1*0*Age)
+BrainHemisphereL_SourceControl <- c(1, 0, 0, Age, 1, 1, 1, 0*0, 0*Age, 0*Age, 0*0*Age)
+
+BrainHemisphereR_SourcePD_BrainHemisphereL_SourcePD <- BrainHemisphereR_SourcePD - BrainHemisphereL_SourcePD
+BrainHemisphereR_SourceControl_BrainHemisphereL_SourceControl <- BrainHemisphereR_SourceControl - BrainHemisphereL_SourceControl
+
+BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl <- BrainHemisphereR_SourcePD_BrainHemisphereL_SourcePD - BrainHemisphereR_SourceControl_BrainHemisphereL_SourceControl
+
+
+#####
+contrast.matrix <- cbind(BrainHemisphereR_SourcePD_BrainHemisphereL_SourcePD, BrainHemisphereR_SourceControl_BrainHemisphereL_SourceControl, BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl)
+rownames(contrast.matrix) <- colnames(design)
+
+fit_Contrast <- contrasts.fit(fit,contrast.matrix)
+fit_Contrast <- eBayes(fit_Contrast)
+
+
+
+BrainHemisphereR_SourcePD_BrainHemisphereL_SourcePD_table <- cbind(PD_Methylation[, 1:5],toptable(fit_Contrast,coef=1,adjust.method="BH",sort="none",n=Inf))
+BrainHemisphereR_SourceControl_BrainHemisphereL_SourceControl_table <- cbind(PD_Methylation[, 1:5],toptable(fit_Contrast,coef=2,adjust.method="BH",sort="none",n=Inf))
+BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table <- cbind(PD_Methylation[, 1:5],toptable(fit_Contrast,coef=3,adjust.method="BH",sort="none",n=Inf))
+
+write.table(BrainHemisphereR_SourcePD_BrainHemisphereL_SourcePD_table, "BrainHemisphereR_SourcePD_BrainHemisphereL_SourcePD_table.txt", quote=F, sep="\t", row.names=F)
+write.table(BrainHemisphereR_SourceControl_BrainHemisphereL_SourceControl_table, "BrainHemisphereR_SourceControl_BrainHemisphereL_SourceControl_table.txt", quote=F, sep="\t", row.names=F)
+write.table(BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table, "BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table.txt", quote=F, sep="\t", row.names=F)
+
+
+
+PD_logFC <- BrainHemisphereR_SourcePD_BrainHemisphereL_SourcePD_table$logFC
+Control_logFC <- BrainHemisphereR_SourceControl_BrainHemisphereL_SourceControl_table$logFC
+
+abs_difference <- abs(BrainHemisphereR_SourcePD_BrainHemisphereL_SourcePD_table$logFC) -abs(BrainHemisphereR_SourceControl_BrainHemisphereL_SourceControl_table$logFC)
+BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table_abs_difference <- data.frame(BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table, PD_logFC, Control_logFC, abs_difference)
+head(BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table_abs_difference)
+
+
+BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table_abs_difference_fdr0.05 <- subset(BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table_abs_difference, BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table_abs_difference$adj.P.Val <= 0.05)
+dim(BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table_abs_difference_fdr0.05)
+
+
+write.table(BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table_abs_difference, "BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table_abs_difference.txt", quote=F, sep="\t", row.names=F)
+
+write.table(BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table_abs_difference_fdr0.05, "BrainHemisphereR_L_SourcePD_BrainHemisphereR_L_SourceControl_table_abs_difference_fdr0.05.txt", quote=F, sep="\t", row.names=F)
+

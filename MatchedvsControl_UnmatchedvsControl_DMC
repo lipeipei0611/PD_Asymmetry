@@ -1,0 +1,46 @@
+PD_Sample_group <- read.table("PD_Sample_group.txt", header=T, sep="\t")
+head(PD_Sample_group)
+dim(PD_Sample_group)
+
+PD_Methylation <- read.table("PD_enh_raw_target_methy_rmWGA_rmOutlier_aveReplicate_70p_rm0_rmCommonSNP_50P_MValue.txt", header=T, sep=" ")
+head(PD_Methylation)
+dim(PD_Methylation)
+
+PD_Methylation_group <- PD_Methylation[, c("chr", "SNP", "str", "type", "seq", as.character(PD_Sample_group$Sample))]
+dim(PD_Methylation_group)
+
+
+library("limma")
+data <- PD_Methylation_group[, 6:ncol(PD_Methylation_group)]
+design <- model.matrix(~ 0 + group + BrainHemisphere + Age + Sex + PMI + GLU, data= PD_Sample_group)
+
+fit <- lmFit(data, design=design,method="robust")
+fit <- eBayes(fit)
+
+
+contrast <- makeContrasts(MatchedvsCTRL= groupmatched-groupControl, nonMatchedvsCTRL= groupnonMatched-groupControl, MatchedvsCTRLvsnonMatchedvsCTRL =(groupmatched-groupControl)-(groupnonMatched-groupControl), levels=design)
+
+fit_Contrast <- contrasts.fit(fit, contrast)
+fit_Contrast <- eBayes(fit_Contrast)
+
+Methylation_MatchedvsCTRL_table <- cbind(PD_Methylation_group[, 1:5],toptable(fit_Contrast,coef=1,adjust.method="BH",sort="none",n=Inf))
+Methylation_nonMatchedvsCTRL_table <- cbind(PD_Methylation_group[, 1:5],toptable(fit_Contrast,coef=2,adjust.method="BH",sort="none",n=Inf))
+Methylation_MatchedvsCTRLvsnonMatchedvsCTRL_table <- cbind(PD_Methylation_group[, 1:5],toptable(fit_Contrast,coef=3,adjust.method="BH",sort="none",n=Inf))
+
+Methylation_MatchedvsCTRL_table_fdr0.05 <- subset(Methylation_MatchedvsCTRL_table, Methylation_MatchedvsCTRL_table$adj.P.Val <= 0.05)
+dim(Methylation_MatchedvsCTRL_table_fdr0.05)
+
+Methylation_nonMatchedvsCTRL_table_fdr0.05 <- subset(Methylation_nonMatchedvsCTRL_table, Methylation_nonMatchedvsCTRL_table$adj.P.Val <= 0.05)
+dim(Methylation_nonMatchedvsCTRL_table_fdr0.05)
+
+Methylation_MatchedvsCTRLvsnonMatchedvsCTRL_table_fdr0.05 <- subset(Methylation_MatchedvsCTRLvsnonMatchedvsCTRL_table, Methylation_MatchedvsCTRLvsnonMatchedvsCTRL_table$adj.P.Val <= 0.05)
+dim(Methylation_MatchedvsCTRLvsnonMatchedvsCTRL_table_fdr0.05)
+
+
+write.table(Methylation_MatchedvsCTRL_table, "Methylation_MatchedvsCTRL_table.txt", row.names=FALSE, quote=FALSE, sep="\t")
+write.table(Methylation_nonMatchedvsCTRL_table, "Methylation_nonMatchedvsCTRL_table.txt", row.names=FALSE, quote=FALSE, sep="\t")
+write.table(Methylation_MatchedvsCTRLvsnonMatchedvsCTRL_table, "Methylation_MatchedvsCTRLvsnonMatchedvsCTRL_table.txt", row.names=FALSE, quote=FALSE, sep="\t")
+write.table(Methylation_MatchedvsCTRL_table_fdr0.05, "Methylation_MatchedvsCTRL_table_fdr0.05.txt", row.names=FALSE, quote=FALSE, sep="\t")
+write.table(Methylation_nonMatchedvsCTRL_table_fdr0.05, "Methylation_nonMatchedvsCTRL_table_fdr0.05.txt", row.names=FALSE, quote=FALSE, sep="\t")
+write.table(Methylation_MatchedvsCTRLvsnonMatchedvsCTRL_table_fdr0.05, "Methylation_MatchedvsCTRLvsnonMatchedvsCTRL_table_fdr0.05.txt", row.names=FALSE, quote=FALSE, sep="\t")
+

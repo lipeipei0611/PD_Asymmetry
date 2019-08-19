@@ -1,0 +1,91 @@
+
+
+Sample_order_prop <- read.table("Sample_order_prop.txt", header=T, sep="\t")
+head(Sample_order_prop)
+summary(Sample_order_prop)
+
+Sample_order_prop_pd <- subset(Sample_order_prop, Sample_order_prop$Dignosis == "PD")
+summary(Sample_order_prop_pd)
+
+write.table(Sample_order_prop_pd, "Sample_order_prop_pd.txt", quote=F, sep="\t", row.names=F)
+
+Sample_order_prop_pd <- read.table("Sample_order_prop_pd.txt", header=T, sep="\t")
+head(Sample_order_prop_pd)
+Sample_order_prop_pd$AsymmetryGroup <- factor(Sample_order_prop_pd$AsymmetryGroup, levels=c("Unmatched", "Matched"))
+
+
+Validation_MValue <- read.table("Validation_MValue.txt", header=T, sep=" ")
+head(Validation_MValue)
+
+###http://www.bioconductor.org/packages/devel/bioc//vignettes/variancePartition/inst/doc/dream.html#limma-analysis
+
+Validation_MValue <- Validation_MValue[, c("chr", "SNP", "str", "type", "seq", as.character(Sample_order_prop_pd$SampleID))]
+
+library("limma")
+data <- Validation_MValue[, 6:ncol(Validation_MValue)]
+design <- model.matrix(~ AsymmetryGroup*Duration + BrainHemisphere + Age + Sex + PMI + GLU, data= Sample_order_prop_pd)
+
+dupcor <- duplicateCorrelation(data, design, block= Sample_order_prop_pd$TissueID)
+fit <- lmFit(data, design, block= Sample_order_prop_pd$TissueID, correlation=dupcor$consensus, method="robust")
+
+DurationMin <- 1
+DurationMax <- 31
+
+dominantMatched_DurationMin <- c(1, 1, DurationMin, 1, 1, 1, 1, 1, 1*DurationMin)
+dominantMatched_DurationMax <- c(1, 1, DurationMax, 1, 1, 1, 1, 1, 1*DurationMax)
+
+dominantnonMatched_DurationMin <- c(1, 0, DurationMin, 1, 1, 1, 1, 1, 0*DurationMin)
+dominantnonMatched_DurationMax <- c(1, 0, DurationMax, 1, 1, 1, 1, 1, 0*DurationMax)
+
+
+dominantMatched_DurationMaxMin <- dominantMatched_DurationMax - dominantMatched_DurationMin
+dominantnonMatched_DurationMaxMin <- dominantnonMatched_DurationMax - dominantnonMatched_DurationMin
+
+dominantMatched_nonMatched_DurationMaxMin <- dominantMatched_DurationMaxMin - dominantnonMatched_DurationMaxMin
+
+#####
+contrast.matrix <- cbind(dominantMatched_DurationMaxMin, dominantnonMatched_DurationMaxMin, dominantMatched_nonMatched_DurationMaxMin)
+rownames(contrast.matrix) <- colnames(design)
+
+fit_Contrast <- contrasts.fit(fit,contrast.matrix)
+fit_Contrast <- eBayes(fit_Contrast)
+
+
+
+dominantMatched_DurationMaxMin_table <- cbind(Validation_MValue[, 1:5],toptable(fit_Contrast,coef=1,adjust.method="BH",sort="none",n=Inf))
+dominantnonMatched_DurationMaxMin_table <- cbind(Validation_MValue[, 1:5],toptable(fit_Contrast,coef=2,adjust.method="BH",sort="none",n=Inf))
+dominantMatched_nonMatched_DurationMaxMin_table <- cbind(Validation_MValue[, 1:5],toptable(fit_Contrast,coef=3,adjust.method="BH",sort="none",n=Inf))
+
+head(dominantMatched_DurationMaxMin_table)
+head(dominantnonMatched_DurationMaxMin_table)
+head(dominantMatched_nonMatched_DurationMaxMin_table)
+
+
+dominantMatched_DurationMaxMin_table_fdr0.05 <- subset(dominantMatched_DurationMaxMin_table, dominantMatched_DurationMaxMin_table$adj.P.Val <= 0.05)
+dominantnonMatched_DurationMaxMin_table_fdr0.05 <- subset(dominantnonMatched_DurationMaxMin_table, dominantnonMatched_DurationMaxMin_table$adj.P.Val <= 0.05)
+
+
+abs_difference <- abs(dominantMatched_DurationMaxMin_table$logFC) -abs(dominantnonMatched_DurationMaxMin_table$logFC)
+dominantMatched_nonMatched_DurationMaxMin_table_abs_difference <- data.frame(dominantMatched_nonMatched_DurationMaxMin_table, abs_difference)
+head(dominantMatched_nonMatched_DurationMaxMin_table_abs_difference)
+
+
+dominantMatched_nonMatched_DurationMaxMin_fdr0.05 <- subset(dominantMatched_nonMatched_DurationMaxMin_table_abs_difference, dominantMatched_nonMatched_DurationMaxMin_table_abs_difference$adj.P.Val <= 0.05)
+dim(dominantMatched_nonMatched_DurationMaxMin_fdr0.05)
+
+summary(dominantMatched_nonMatched_DurationMaxMin_fdr0.05$logFC)
+
+summary(dominantMatched_nonMatched_DurationMaxMin_fdr0.05$abs_difference)
+
+
+
+write.table(dominantMatched_DurationMaxMin_table, "dominantMatched_DurationMaxMin_table.txt", quote=F, sep="\t", row.names=F)
+write.table(dominantMatched_DurationMaxMin_table_fdr0.05, "dominantMatched_DurationMaxMin_table_fdr0.05.txt", quote=F, sep="\t", row.names=F)
+
+write.table(dominantnonMatched_DurationMaxMin_table, "dominantnonMatched_DurationMaxMin_table.txt", quote=F, sep="\t", row.names=F)
+write.table(dominantnonMatched_DurationMaxMin_table_fdr0.05, "dominantnonMatched_DurationMaxMin_table_fdr0.05.txt", quote=F, sep="\t", row.names=F)
+
+write.table(dominantMatched_nonMatched_DurationMaxMin_table_abs_difference, "dominantMatched_nonMatched_DurationMaxMin_table_abs_difference.txt", quote=F, sep="\t", row.names=F)
+write.table(dominantMatched_nonMatched_DurationMaxMin_fdr0.05, "dominantMatched_nonMatched_DurationMaxMin_fdr0.05.txt", quote=F, sep="\t", row.names=F)
+
+
